@@ -6,6 +6,7 @@ from aiohttp import web
 from conftest import (
     add_error_decorator,
     mock_get_meters_endpoint,
+    mock_new_search_empty_endpoint,
     mock_read_meter_endpoint,
     mock_signin_endpoint,
 )
@@ -131,7 +132,7 @@ async def test_client_data_401(aiohttp_client: Any) -> None:
         "/dashboard/user",
         add_error_decorator(mock_get_meters_endpoint, 401),
     )
-    app.router.add_post("/api/2/residential/new_search", mock_read_meter_endpoint)
+    app.router.add_post("/api/2/residential/new_search", mock_new_search_empty_endpoint)
     websession = await aiohttp_client(app)
 
     account = Account(  # nosec: B106
@@ -146,7 +147,8 @@ async def test_client_data_401(aiohttp_client: Any) -> None:
     assert client.authenticated is True  # nosec: B101
 
     # fetch will reauthenticate and retry
-    await account.fetch_meters(client=client)
+    readers = await account.fetch_meter_readers(client=client)
+    assert len(readers) > 0  # nosec: B101
 
 
 @pytest.mark.asyncio()
@@ -216,6 +218,7 @@ async def test_client_truncates_long_error_payload(aiohttp_client: Any) -> None:
 
     app = web.Application()
     app.router.add_post("/account/signin", mock_signin_endpoint)
+    app.router.add_post("/api/2/residential/new_search", mock_new_search_empty_endpoint)
     app.router.add_get("/dashboard/user", mock_long_error)
     websession = await aiohttp_client(app)
 
@@ -292,4 +295,65 @@ async def test_client_falls_back_to_dashboard_when_new_search_empty(
     assert len(readers) == 1  # nosec: B101
     assert readers[0].meter_uuid == "123"  # nosec: B101
     assert readers[0].meter_id == "456"  # nosec: B101
-        await account.fetch_meter_readers(client=client)
+
+
+@pytest.mark.asyncio()
+async def test_client_new_search_skips_incomplete_hits(aiohttp_client: Any) -> None:
+    """Hits missing both meter_uuid and meter_id must be silently skipped."""
+
+    async def mock_incomplete_hits(_request: web.Request) -> web.Response:
+        # First hit has no identifiers at all; second hit is valid.
+        data = (
+            '{"elastic_results": {"hits": {"hits": ['
+            '{"_id": null, "_source": {}},'
+            '{"_id": "good_uuid", "_source": {'
+            '"meter_uuid": "good_uuid", "meter_id": "99"}}'
+            "]}}}"
+        )
+        return web.Response(status=200, text=data)
+
+    app = web.Application()
+    app.router.add_post("/account/signin", mock_signin_endpoint)
+    app.router.add_post("/api/2/residential/new_search", mock_incomplete_hits)
+    websession = await aiohttp_client(app)
+
+    account = Account(  # nosec: B106
+        eow_hostname="",
+        username="user",
+        password="",
+    )
+
+    client = Client(websession=websession, account=account)
+    await client.authenticate()
+
+    readers = await account.fetch_meter_readers(client=client)
+    assert len(readers) == 1  # nosec: B101
+    assert readers[0].meter_uuid == "good_uuid"  # nosec: B101
+    assert readers[0].meter_id == "99"  # nosec: B101
+
+
+@pytest.mark.asyncio()
+async def test_client_new_search_invalid_json_falls_back_to_dashboard(
+    aiohttp_client: Any,
+) -> None:
+    """Verify JSONDecodeError from new_search triggers dashboard fallback."""
+
+    async def mock_new_search_bad_json(_request: web.Request) -> web.Response:
+        return web.Response(text="not json at all")
+
+    app = web.Application()
+    app.router.add_post("/account/signin", mock_signin_endpoint)
+    app.router.add_post("/api/2/residential/new_search", mock_new_search_bad_json)
+    app.router.add_get("/dashboard/user", mock_get_meters_endpoint)
+    websession = await aiohttp_client(app)
+
+    account = Account(  # nosec: B106
+        eow_hostname="",
+        username="user",
+        password="",
+    )
+    client = Client(websession=websession, account=account)
+    await client.authenticate()
+
+    readers = await account.fetch_meter_readers(client=client)
+    assert len(readers) > 0  # nosec: B101

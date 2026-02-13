@@ -35,15 +35,15 @@ def replace_units(data: Any, new_unit: str) -> Any:
         The data structure with all unit strings replaced.
     """
     if isinstance(data, dict):
-        d = cast(dict[str, Any], data)
-        for key in d:
-            d[key] = replace_units(d[key], new_unit)
-        return d
+        data_dict = cast(dict[Any, Any], data)
+        for key in data_dict:
+            data_dict[key] = replace_units(data_dict[key], new_unit)
+        return data_dict
     if isinstance(data, list):
-        lst = cast(list[Any], data)
-        for i, item in enumerate(lst):
-            lst[i] = replace_units(item, new_unit)
-        return lst
+        data_list = cast(list[Any], data)
+        for i, item in enumerate(data_list):
+            data_list[i] = replace_units(item, new_unit)
+        return data_list
     if is_unit(data):
         return new_unit
     return data
@@ -133,6 +133,14 @@ def add_error_decorator(
 mock_read_meter_endpoint: Callable[
     [web.Request], Awaitable[web.Response]
 ] = build_data_endpoint("read_meter_mock_anonymized")
+
+
+async def mock_new_search_empty_endpoint(_request: web.Request) -> web.Response:
+    """Return a well-formed new_search response with zero hits."""
+    return web.Response(
+        status=200,
+        text='{"elastic_results": {"hits": {"hits": []}}}',
+    )
 
 
 async def mock_historical_data_endpoint(request: web.Request) -> web.Response:

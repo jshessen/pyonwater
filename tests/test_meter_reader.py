@@ -182,3 +182,31 @@ async def test_meter_reader_historical_invalid_json_raises(aiohttp_client: Any) 
 
     with pytest.raises(EyeOnWaterAPIError):  # nosec: B101
         await reader.read_historical_data(client=client, days_to_load=1)
+
+
+@pytest.mark.asyncio()
+async def test_meter_reader_historical_invalid_json_debug_logging(
+    aiohttp_client: Any,
+) -> None:
+    """With DEBUG logging enabled, invalid JSON logs the raw response before raising."""
+
+    async def mock_bad_json(_request: web.Request) -> web.Response:
+        return web.Response(text="{this is not: valid json!!!}")
+
+    app = web.Application()
+    app.router.add_post("/account/signin", mock_signin_endpoint)
+    app.router.add_post("/api/2/residential/new_search", mock_read_meter_endpoint)
+    app.router.add_post("/api/2/residential/consumption", mock_bad_json)
+
+    websession = await aiohttp_client(app)
+    _, client = await build_client(websession)
+    reader = MeterReader(meter_uuid="meter_uuid", meter_id="meter_id")
+
+    logger = logging.getLogger("pyonwater.meter_reader")
+    original_level = logger.level
+    try:
+        logger.setLevel(logging.DEBUG)
+        with pytest.raises(EyeOnWaterAPIError):  # nosec: B101
+            await reader.read_historical_data(client=client, days_to_load=1)
+    finally:
+        logger.setLevel(original_level)
