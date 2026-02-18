@@ -13,6 +13,7 @@ import pytz
 
 from .exceptions import EyeOnWaterAPIError, EyeOnWaterResponseIsEmpty
 from .models import DataPoint, HistoricalData, MeterInfo
+from .models.eow_historical_models import AtAGlanceData
 from .models.units import AggregationLevel, RequestUnits
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -20,9 +21,33 @@ if TYPE_CHECKING:  # pragma: no cover
 
 SEARCH_ENDPOINT = "/api/2/residential/new_search"
 CONSUMPTION_ENDPOINT = "/api/2/residential/consumption?eow=True"
+AT_A_GLANCE_ENDPOINT = "/api/2/residential/at_a_glance"
 
-# Fallback units when the caller does not specify a preference.
+# Default request units (cubic meters - "cm") for API calls
+# This is the standard unit when users don't specify a preference
 DEFAULT_REQUEST_UNITS = "cm"
+
+# EyeOnWater API Contract Requirements
+# =====================================
+# The consumption endpoint has strict requirements for request parameters.
+# Missing ANY required parameter will cause the API to return an empty response ("").
+#
+# REQUIRED Parameters for /api/2/residential/consumption:
+#   - source: Must be "barnacle"
+#   - aggregate: Aggregation level (e.g., "hourly", "daily", etc.)
+#   - units: Units for response (e.g., "cm", "gal") - CRITICAL: Cannot be omitted
+#   - perspective: Must be "billing"
+#   - combine: Must be "true"
+#   - date: Date in format MM/DD/YYYY
+#   - display_minutes, display_hours, display_days, display_weeks: All boolean
+#   - furthest_zoom: Typically "hr"
+#
+# Query structure:
+#   {"query": {"terms": {"meter.meter_uuid": [<uuid>]}}}
+#
+# Historical Context:
+#   PR #36 (Feb 2026) made 'units' conditional, causing all requests with units=None
+#   to return empty responses. Always include all required parameters with defaults.
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -76,8 +101,9 @@ class MeterReader:
         days_to_load: int,
         aggregation: AggregationLevel = AggregationLevel.HOURLY,
         units: RequestUnits | None = None,
+        end_date: datetime.datetime | None = None,
     ) -> list[DataPoint]:
-        """Retrieve historical data for today and past N days.
+        """Retrieve historical data for N days ending on specified date.
 
         Args:
             client: The authenticated API client.
@@ -85,6 +111,7 @@ class MeterReader:
             aggregation: Granularity level for data (default: HOURLY).
                          Use QUARTER_HOURLY for 15-minute resolution.
             units: Preferred units for response data (optional).
+            end_date: Optional end date (defaults to today if not provided).
 
         Raises:
             ValueError: If days_to_load is not positive.
@@ -93,15 +120,21 @@ class MeterReader:
             msg = f"days_to_load must be at least 1, got {days_to_load}"
             raise ValueError(msg)
 
-        today = datetime.datetime.now().replace(
+        # Use provided end_date or default to today
+        if end_date is None:
+            end_date = datetime.datetime.now()
+
+        # Normalize to midnight while preserving timezone
+        end_date = end_date.replace(
             hour=0,
             minute=0,
             second=0,
             microsecond=0,
+            tzinfo=end_date.tzinfo,
         )
 
         date_list: list[datetime.datetime] = [
-            today - datetime.timedelta(days=x) for x in range(0, days_to_load)
+            end_date - datetime.timedelta(days=x) for x in range(0, days_to_load)
         ]
         date_list.reverse()
 
@@ -280,3 +313,47 @@ class MeterReader:
 
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self.convert, data, key)
+
+    async def read_at_a_glance(
+        self,
+        client: Client,
+        units: RequestUnits | None = None,
+    ) -> AtAGlanceData:
+        """Retrieve quick summary statistics from at_a_glance endpoint.
+
+        Returns usage summaries: this_week, last_week, and average daily usage.
+
+        Args:
+            client: The authenticated API client.
+            units: Preferred units for response (optional, defaults to cm).
+
+        Returns:
+            AtAGlanceData with this_week, last_week, and average values.
+
+        Note:
+            The at_a_glance API may have similar parameter requirements as
+            consumption API. We provide a default unit value to avoid empty
+            responses, though it appears more lenient than consumption endpoint.
+        """
+        params: dict[str, str] = {
+            "source": "barnacle",
+            "perspective": "billing",
+            "units": (units.value if units is not None else DEFAULT_REQUEST_UNITS),
+        }
+
+        query: dict[str, Any] = {
+            "params": params,
+            "query": {"query": {"terms": {"meter.meter_uuid": [self.meter_uuid]}}},
+        }
+        raw_data = await client.request(
+            path=AT_A_GLANCE_ENDPOINT,
+            method="post",
+            json=query,
+        )
+        try:
+            data = AtAGlanceData.model_validate_json(raw_data)
+        except ValidationError as e:
+            msg = f"Unexpected at_a_glance response {e}"
+            raise EyeOnWaterAPIError(msg) from e
+
+        return data

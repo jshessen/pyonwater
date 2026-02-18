@@ -116,6 +116,7 @@ class Series(BaseModel):
                 f"Date must be a string or datetime, got {type(v).__name__}"
             )
 
+        # Try parsing in order of specificity
         date_formats = [
             "%Y-%m-%d %H:%M:%S",  # Actual API format: 2026-02-10 00:00:00
             "%Y-%m-%dT%H:%M:%S",  # ISO datetime:      2026-02-10T00:00:00
