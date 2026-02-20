@@ -13,7 +13,6 @@ import pytz
 
 from .exceptions import EyeOnWaterAPIError, EyeOnWaterResponseIsEmpty
 from .models import DataPoint, HistoricalData, MeterInfo
-from .models.eow_historical_models import AtAGlanceData
 from .models.units import AggregationLevel, RequestUnits
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -21,7 +20,6 @@ if TYPE_CHECKING:  # pragma: no cover
 
 SEARCH_ENDPOINT = "/api/2/residential/new_search"
 CONSUMPTION_ENDPOINT = "/api/2/residential/consumption?eow=True"
-AT_A_GLANCE_ENDPOINT = "/api/2/residential/at_a_glance"
 
 # Default request units (cubic meters - "cm") for API calls
 # This is the standard unit when users don't specify a preference
@@ -255,9 +253,14 @@ class MeterReader:
                 raw_data[:1000] if raw_data else "None",
             )
 
-        # The API signals "no data for this date" in three ways:
-        #   '' or whitespace-only, '""' (JSON-encoded empty string), or 'null'.
-        # All three are treated as empty so the daily loop can skip them cleanly.
+        # Handle empty responses from API.
+        # The API returns several forms of "no data for this date":
+        #   - truly empty body: '' or whitespace-only
+        #   - JSON-encoded empty string: '""'
+        #   - JSON null: 'null'
+        # All three must be caught here so they raise EyeOnWaterResponseIsEmpty
+        # (which the daily loop silently skips) rather than reaching Pydantic and
+        # propagating as a coordinator-level ERROR.
         stripped = raw_data.strip() if raw_data else ""
         if not stripped or stripped in ('""', "null"):
             date_str = date.strftime("%Y-%m-%d")
@@ -281,15 +284,12 @@ class MeterReader:
             ):
                 msg = (
                     f"Empty/null JSON from Eye on Water API for "
-                    f"{date.strftime('%Y-%m-%d')}"
+                    f"{date.strftime('%Y-%m-%d')} (json_invalid with empty input)"
                 )
                 _LOGGER.debug(msg)
                 raise EyeOnWaterResponseIsEmpty(msg) from e
-            _LOGGER.error(
-                "Pydantic validation error for %s: %s",
-                date.strftime("%Y-%m-%d"),
-                e,
-            )
+            _LOGGER.error("Pydantic validation error: %s", e)
+            _LOGGER.error("Validation errors detail: %s", e.errors())
             if _LOGGER.isEnabledFor(logging.DEBUG):
                 _LOGGER.debug(
                     "Raw API response (first 1000 chars): %s",
@@ -313,47 +313,3 @@ class MeterReader:
 
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self.convert, data, key)
-
-    async def read_at_a_glance(
-        self,
-        client: Client,
-        units: RequestUnits | None = None,
-    ) -> AtAGlanceData:
-        """Retrieve quick summary statistics from at_a_glance endpoint.
-
-        Returns usage summaries: this_week, last_week, and average daily usage.
-
-        Args:
-            client: The authenticated API client.
-            units: Preferred units for response (optional, defaults to cm).
-
-        Returns:
-            AtAGlanceData with this_week, last_week, and average values.
-
-        Note:
-            The at_a_glance API may have similar parameter requirements as
-            consumption API. We provide a default unit value to avoid empty
-            responses, though it appears more lenient than consumption endpoint.
-        """
-        params: dict[str, str] = {
-            "source": "barnacle",
-            "perspective": "billing",
-            "units": (units.value if units is not None else DEFAULT_REQUEST_UNITS),
-        }
-
-        query: dict[str, Any] = {
-            "params": params,
-            "query": {"query": {"terms": {"meter.meter_uuid": [self.meter_uuid]}}},
-        }
-        raw_data = await client.request(
-            path=AT_A_GLANCE_ENDPOINT,
-            method="post",
-            json=query,
-        )
-        try:
-            data = AtAGlanceData.model_validate_json(raw_data)
-        except ValidationError as e:
-            msg = f"Unexpected at_a_glance response {e}"
-            raise EyeOnWaterAPIError(msg) from e
-
-        return data

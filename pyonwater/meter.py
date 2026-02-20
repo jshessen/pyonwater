@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 
 from .exceptions import EyeOnWaterException
 from .models import DataPoint
-from .models.eow_historical_models import AtAGlanceData
 from .models.units import AggregationLevel, RequestUnits
 from .units import EOWUnits, convert_to_native, deduce_native_units
 
@@ -138,18 +137,3 @@ class Meter:
             flow_value=native_flow_value,
             end_dt=dp.end_dt,
         )
-
-    async def read_at_a_glance(
-        self,
-        client: Client,
-        units: RequestUnits | None = None,
-    ) -> AtAGlanceData:
-        """Retrieve quick summary statistics.
-
-        Returns this_week, last_week, and average daily usage.
-
-        Args:
-            client: The authenticated API client.
-            units: Preferred units for response (optional).
-        """
-        return await self._reader.read_at_a_glance(client=client, units=units)
