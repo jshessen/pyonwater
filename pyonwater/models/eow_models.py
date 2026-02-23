@@ -1,4 +1,5 @@
 # ruff: noqa
+"""Models for meter data and account information from EyeOnWater API."""
 
 from __future__ import annotations
 
@@ -11,7 +12,8 @@ from .units import EOWUnits
 
 
 class Service(BaseModel):
-    # Optional fields
+    """Service information for a utility account."""
+
     class_code_normalized: Optional[str] = None
     route: Optional[str] = None
     active: Optional[bool] = None
@@ -24,7 +26,8 @@ class Service(BaseModel):
 
 
 class Location(BaseModel):
-    # Optional fields
+    """Physical location information for a meter."""
+
     city: Optional[str] = None
     parcel_number: Optional[str] = None
     location_name: Optional[str] = None
@@ -47,7 +50,8 @@ class Location(BaseModel):
 
 
 class LeakAlert(BaseModel):
-    # Optional fields
+    """Leak alert information."""
+
     alert_type: Optional[str] = None
     name: Optional[str] = None
     residential_user_name: Optional[str] = None
@@ -59,12 +63,14 @@ class LeakAlert(BaseModel):
 
 
 class Alerts(BaseModel):
-    # Optional fields
+    """Container for various alert types."""
+
     leak_alert: Optional[LeakAlert] = None
 
 
 class AccountInfo(BaseModel):
-    # Optional fields
+    """Account holder information."""
+
     status: Optional[str] = None
     first_name: Optional[str] = None
     billing_address: Optional[str] = None
@@ -89,12 +95,14 @@ class AccountInfo(BaseModel):
 
 
 class SensorsAvailable(BaseModel):
-    # Optional fields
+    """Available sensor types for a meter."""
+
     types: Optional[list[str]] = None
 
 
 class Battery(BaseModel):
-    # Optional fields
+    """Battery status information for a meter."""
+
     register_: Optional[int] = Field(None, alias="register")
     level: Optional[int] = None
     quality: Optional[str] = None
@@ -103,7 +111,8 @@ class Battery(BaseModel):
 
 
 class Pwr(BaseModel):
-    # Optional fields
+    """Power/signal information for a meter endpoint."""
+
     level: Optional[int] = None
     register_: Optional[int] = Field(None, alias="register")
     signal_7days: Optional[int] = None
@@ -114,7 +123,8 @@ class Pwr(BaseModel):
 
 
 class Notes(BaseModel):
-    # Optional fields
+    """Notes or comments count."""
+
     count: Optional[int] = None
 
 
@@ -128,7 +138,8 @@ class LeakStatus(BaseModel):
 
 
 class Flow(BaseModel):
-    # Optional fields
+    """Flow/usage comparison data."""
+
     this_week: Optional[float] = None
     months_updated: Optional[str] = None
     last_month: Optional[float] = None
@@ -150,13 +161,15 @@ class Flow(BaseModel):
 
 
 class ActiveFlags(BaseModel):
-    # Optional fields
+    """Active status flags for a meter."""
+
     active_flags: Optional[list[str]] = None
     time: Optional[datetime] = None
 
 
 class MeterData(BaseModel):
-    # Optional fields
+    """Meter-specific configuration and status data."""
+
     sensors_available: Optional[SensorsAvailable] = None
     has_endpoint: Optional[bool] = None
     install_date: Optional[datetime] = None
@@ -205,17 +218,17 @@ class MeterData(BaseModel):
 
 
 class ServiceAgreement(BaseModel):
-    # Optional fields
+    """Service agreement details."""
+
     service_agreement_uuid: Optional[str] = None
     start_date: Optional[datetime] = None
 
 
 class LatestRead(BaseModel):
-    # Mandatory fields
+    """Most recent meter reading data."""
+
     full_read: float
     units: EOWUnits
-
-    # Optional fields
     bill_read: Optional[float] = None
     bill_display_units: Optional[EOWUnits] = None
     read_time: datetime
@@ -224,13 +237,15 @@ class LatestRead(BaseModel):
 
 
 class Timeslots(BaseModel):
-    # Optional fields
+    """Time slot information for meter readings."""
+
     weekend: Optional[list[int]] = None
     weekday: Optional[list[int]] = None
 
 
 class Encoder(BaseModel):
-    # Optional fields
+    """Encoder/dial information for a meter register."""
+
     time: Optional[datetime] = None
     dials: Optional[int] = None
     register_id: Optional[str] = None
@@ -238,7 +253,9 @@ class Encoder(BaseModel):
 
 
 class Flags(BaseModel):
-    # Mandatory fields (used by EOW HA integration)
+    """Flag indicators for meter status and conditions."""
+
+    # Fields consumed by the EOW Home Assistant integration.
     empty_pipe: bool = Field(..., alias="EmptyPipe")
     leak: bool = Field(..., alias="Leak")
     cover_removed: bool = Field(..., alias="CoverRemoved")
@@ -247,7 +264,6 @@ class Flags(BaseModel):
     low_battery: bool = Field(..., alias="LowBattery")
     battery_charging: bool = Field(..., alias="BatteryCharging")
 
-    # Optional fields
     forced: Optional[bool] = Field(None, alias="Forced")
     magnetic_tamper: Optional[bool] = Field(None, alias="MagneticTamper")
     encoder_no_usage: Optional[bool] = Field(None, alias="EncoderNoUsage")
@@ -284,7 +300,8 @@ class Flags(BaseModel):
 
 
 class Reading(BaseModel):
-    # Mandatory fields
+    """Complete meter reading with flags and latest read data."""
+
     flags: Flags
     latest_read: LatestRead
 
@@ -337,13 +354,15 @@ class Reading(BaseModel):
 
 
 class Conditions(BaseModel):
-    # Optional fields
+    """Conditions or trends for a value."""
+
     increasing: Optional[bool] = None
     decreasing: Optional[bool] = None
 
 
 class EndpointTemperature(BaseModel):
-    # Optional fields
+    """Temperature readings from endpoint sensor."""
+
     latest_average: Optional[float] = None
     last_reported: Optional[str] = None
     seven_day_min: Optional[float] = None
@@ -354,12 +373,14 @@ class EndpointTemperature(BaseModel):
 
 
 class Sensors(BaseModel):
-    # Optional fields
+    """Sensor data and readings from a meter."""
+
     endpoint_temperature: Optional[EndpointTemperature] = None
 
 
 class Utility(BaseModel):
-    # Optional fields
+    """Utility service provider information."""
+
     fluid_barrel_billing_unit: Optional[str] = None
     cm_billing_unit: Optional[str] = None
     cf_billing_unit: Optional[str] = None
@@ -377,14 +398,16 @@ class Utility(BaseModel):
 
 
 class User(BaseModel):
-    # Optional fields
+    """User account information."""
+
     user_uuid: Optional[str] = None
     user_name: Optional[str] = None
     date_created: Optional[str] = None
 
 
 class Groups(BaseModel):
-    # Optional fields
+    """Service group classifications for a meter."""
+
     irrigation: Optional[str] = None
     continuous_flow: Optional[str] = None
     is_irrigatable: Optional[str] = None
@@ -392,9 +415,9 @@ class Groups(BaseModel):
 
 
 class MeterInfo(BaseModel):
-    # Mandatory fields
-    reading: Reading = Field(..., alias="register_0")
+    """Complete meter information including reading and service details."""
 
+    reading: Reading = Field(..., alias="register_0")
     # Optional fields
     leak: Optional[LeakStatus] = None
     sensors: Optional[Sensors] = None
@@ -410,3 +433,32 @@ class MeterInfo(BaseModel):
     version: Optional[str] = None
     user: Optional[User] = None
     groups: Optional[Groups] = None
+
+
+__all__ = [
+    "Service",
+    "Location",
+    "LeakAlert",
+    "Alerts",
+    "AccountInfo",
+    "SensorsAvailable",
+    "Battery",
+    "Pwr",
+    "Notes",
+    "Flow",
+    "ActiveFlags",
+    "MeterData",
+    "ServiceAgreement",
+    "LatestRead",
+    "Timeslots",
+    "Encoder",
+    "Flags",
+    "Reading",
+    "Conditions",
+    "EndpointTemperature",
+    "Sensors",
+    "Utility",
+    "User",
+    "Groups",
+    "MeterInfo",
+]

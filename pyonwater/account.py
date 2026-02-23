@@ -36,14 +36,14 @@ class Account:
 
     async def fetch_meter_readers(self, client: Client) -> list[MeterReader]:
         """List the meter readers associated with the account."""
-        new_search_meters = await self._fetch_meter_readers_new_search(client)
-        if new_search_meters:
-            return new_search_meters
+        meters: list[MeterReader] = await self._fetch_meter_readers_new_search(client)
+        if meters:
+            return meters
 
         path = DASHBOARD_ENDPOINT + urllib.parse.quote(self.username)
         data = await client.request(path=path, method="get")
 
-        meters: list[MeterReader] = []
+        meters = []
         lines = data.split("\n")
         for line in lines:
             if INFO_PREFIX in line:
@@ -55,8 +55,8 @@ class Account:
                             msg,
                         )
 
-                    meter_uuid: str = meter_info[METER_UUID_FIELD]
-                    meter_id: str = meter_info[METER_ID_FIELD]
+                    meter_uuid = meter_info[METER_UUID_FIELD]
+                    meter_id = meter_info[METER_ID_FIELD]
 
                     meter = MeterReader(
                         meter_uuid=meter_uuid,
@@ -80,16 +80,14 @@ class Account:
         except (EyeOnWaterAPIError, json.JSONDecodeError, TypeError, ValueError):
             return []
 
-        elastic: dict[str, Any] = payload.get("elastic_results") or {}
-        hits_wrapper: dict[str, Any] = elastic.get("hits") or {}
-        hits: list[Any] = hits_wrapper.get("hits") or []
+        hits = payload.get("elastic_results", {}).get("hits", {}).get("hits", [])
         meters: list[MeterReader] = []
         for hit in hits:
-            source: dict[str, Any] = hit.get("_source") or {}
-            meter_obj_raw: Any = source.get("meter")
+            source: dict[str, Any] = hit.get("_source", {})
+            raw_meter_obj: Any = source.get("meter")
             meter_obj: dict[str, Any] = (
-                cast(dict[str, Any], meter_obj_raw)
-                if isinstance(meter_obj_raw, dict)
+                cast(dict[str, Any], raw_meter_obj)
+                if isinstance(raw_meter_obj, dict)
                 else {}
             )
 

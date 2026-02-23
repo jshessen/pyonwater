@@ -13,6 +13,7 @@ import pytz
 
 from .exceptions import EyeOnWaterAPIError, EyeOnWaterResponseIsEmpty
 from .models import DataPoint, HistoricalData, MeterInfo
+from .models.eow_historical_models import AtAGlanceData
 from .models.units import AggregationLevel, RequestUnits
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -20,32 +21,10 @@ if TYPE_CHECKING:  # pragma: no cover
 
 SEARCH_ENDPOINT = "/api/2/residential/new_search"
 CONSUMPTION_ENDPOINT = "/api/2/residential/consumption?eow=True"
+AT_A_GLANCE_ENDPOINT = "/api/2/residential/at_a_glance"
 
-# Default request units (cubic meters - "cm") for API calls
-# This is the standard unit when users don't specify a preference
+# Fallback units when the caller does not specify a preference.
 DEFAULT_REQUEST_UNITS = "cm"
-
-# EyeOnWater API Contract Requirements
-# =====================================
-# The consumption endpoint has strict requirements for request parameters.
-# Missing ANY required parameter will cause the API to return an empty response ("").
-#
-# REQUIRED Parameters for /api/2/residential/consumption:
-#   - source: Must be "barnacle"
-#   - aggregate: Aggregation level (e.g., "hourly", "daily", etc.)
-#   - units: Units for response (e.g., "cm", "gal") - CRITICAL: Cannot be omitted
-#   - perspective: Must be "billing"
-#   - combine: Must be "true"
-#   - date: Date in format MM/DD/YYYY
-#   - display_minutes, display_hours, display_days, display_weeks: All boolean
-#   - furthest_zoom: Typically "hr"
-#
-# Query structure:
-#   {"query": {"terms": {"meter.meter_uuid": [<uuid>]}}}
-#
-# Historical Context:
-#   PR #36 (Feb 2026) made 'units' conditional, causing all requests with units=None
-#   to return empty responses. Always include all required parameters with defaults.
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -118,11 +97,9 @@ class MeterReader:
             msg = f"days_to_load must be at least 1, got {days_to_load}"
             raise ValueError(msg)
 
-        # Use provided end_date or default to today
         if end_date is None:
             end_date = datetime.datetime.now()
 
-        # Normalize to midnight while preserving timezone
         end_date = end_date.replace(
             hour=0,
             minute=0,
@@ -253,14 +230,9 @@ class MeterReader:
                 raw_data[:1000] if raw_data else "None",
             )
 
-        # Handle empty responses from API.
-        # The API returns several forms of "no data for this date":
-        #   - truly empty body: '' or whitespace-only
-        #   - JSON-encoded empty string: '""'
-        #   - JSON null: 'null'
-        # All three must be caught here so they raise EyeOnWaterResponseIsEmpty
-        # (which the daily loop silently skips) rather than reaching Pydantic and
-        # propagating as a coordinator-level ERROR.
+        # The API signals "no data for this date" in three ways:
+        #   '' or whitespace-only, '""' (JSON-encoded empty string), or 'null'.
+        # All three are treated as empty so the daily loop can skip them cleanly.
         stripped = raw_data.strip() if raw_data else ""
         if not stripped or stripped in ('""', "null"):
             date_str = date.strftime("%Y-%m-%d")
@@ -284,12 +256,15 @@ class MeterReader:
             ):
                 msg = (
                     f"Empty/null JSON from Eye on Water API for "
-                    f"{date.strftime('%Y-%m-%d')} (json_invalid with empty input)"
+                    f"{date.strftime('%Y-%m-%d')}"
                 )
                 _LOGGER.debug(msg)
                 raise EyeOnWaterResponseIsEmpty(msg) from e
-            _LOGGER.error("Pydantic validation error: %s", e)
-            _LOGGER.error("Validation errors detail: %s", e.errors())
+            _LOGGER.error(
+                "Pydantic validation error for %s: %s",
+                date.strftime("%Y-%m-%d"),
+                e,
+            )
             if _LOGGER.isEnabledFor(logging.DEBUG):
                 _LOGGER.debug(
                     "Raw API response (first 1000 chars): %s",
@@ -313,3 +288,37 @@ class MeterReader:
 
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self.convert, data, key)
+
+    async def read_at_a_glance(
+        self,
+        client: Client,
+    ) -> AtAGlanceData:
+        """Retrieve quick summary statistics from at_a_glance endpoint.
+
+        Returns per-day usage for this week and last week, plus a rolling
+        daily average.
+
+        Args:
+            client: The authenticated API client.
+
+        Returns:
+            AtAGlanceData with this_week/last_week daily arrays and average.
+
+        Note:
+            The at_a_glance endpoint accepts only ``{"meter_uuid": "..."}``
+            and determines units and aggregation server-side.  Use
+            ``read_historical_data`` for unit/aggregation control.
+        """
+        body: dict[str, str] = {"meter_uuid": self.meter_uuid}
+        raw_data = await client.request(
+            path=AT_A_GLANCE_ENDPOINT,
+            method="post",
+            json=body,
+        )
+        try:
+            data = AtAGlanceData.model_validate_json(raw_data)
+        except ValidationError as e:
+            msg = f"Unexpected at_a_glance response {e}"
+            raise EyeOnWaterAPIError(msg) from e
+
+        return data

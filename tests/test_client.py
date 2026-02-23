@@ -3,13 +3,14 @@
 from typing import Any
 
 from aiohttp import web
+import pytest
+
 from conftest import (
     add_error_decorator,
     mock_get_meters_endpoint,
     mock_read_meter_endpoint,
     mock_signin_endpoint,
 )
-import pytest
 
 from pyonwater import (
     Account,
@@ -292,3 +293,4 @@ async def test_client_falls_back_to_dashboard_when_new_search_empty(
     assert len(readers) == 1  # nosec: B101
     assert readers[0].meter_uuid == "123"  # nosec: B101
     assert readers[0].meter_id == "456"  # nosec: B101
+        await account.fetch_meter_readers(client=client)

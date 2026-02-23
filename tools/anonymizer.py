@@ -5,11 +5,9 @@ import json
 import os
 import re
 import sys
-from typing import Any, TypeAlias, Union
+from typing import Any
 
 from pyonwater.models import EOWUnits
-
-_JsonValue: TypeAlias = Union[dict[str, Any], list[Any], bool, int, float, str, None]
 
 
 def is_date(string: str, mask: str) -> bool:
@@ -30,34 +28,40 @@ def is_unit(string: str) -> bool:
         return False
 
 
-def traverse(data: _JsonValue) -> _JsonValue:  # noqa: C901
+def traverse(data: Any) -> Any:  # noqa: C901
     """Anonymize an entity."""
     if isinstance(data, dict):
-        return {k: traverse(v) for k, v in data.items()}
+        d: dict[str, Any] = data  # type: ignore[assignment]
+        for k in d:
+            d[k] = traverse(d[k])
+        return d
     if isinstance(data, list):
-        for i, item in enumerate(data):
-            data[i] = traverse(item)
-        return data
+        lst: list[Any] = data  # type: ignore[assignment]
+        for i, item in enumerate(lst):
+            lst[i] = traverse(item)
+        return lst
     if isinstance(data, bool):
         return data
-    if isinstance(data, int):
+    elif isinstance(data, int):
         return int("1" * len(str(data)))
-    if isinstance(data, float):
+    elif isinstance(data, float):
         return 42.0
-    if isinstance(data, str):
+    elif isinstance(data, str):
         if is_date(data, "%Y-%m-%dT%H:%M:%S.%fZ"):
             return datetime.datetime(1990, 1, 27, 0, 0).strftime(
                 "%Y-%m-%dT%H:%M:%S.%fZ",
             )
-        if is_date(data, "%Y-%m-%dT%H:%M:%S"):
+        elif is_date(data, "%Y-%m-%dT%H:%M:%S"):
             return datetime.datetime(1990, 1, 27, 0, 0).strftime("%Y-%m-%dT%H:%M:%S")
-        if is_date(data, "%Y-%m-%d %H:%M:%S"):
+        elif is_date(data, "%Y-%m-%d %H:%M:%S"):
             return datetime.datetime(1990, 1, 27, 0, 0).strftime("%Y-%m-%d %H:%M:%S")
-        if is_unit(data):
+        elif is_unit(data):
             return data
-        data = re.sub(r"[a-zA-Z]", "X", data)
-        return re.sub(r"[\d]", "1", data)
-    return data
+        else:
+            data = re.sub(r"[a-zA-Z]", "X", data)
+            return re.sub(r"[\d]", "1", data)
+    else:
+        return data
 
 
 def main(argv: Any) -> None:

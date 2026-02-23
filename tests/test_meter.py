@@ -1,9 +1,11 @@
-"""Tests for pyonwater meter."""
+"""Tests for pyonwater meter."""  # nosec: B101, B106
 
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from aiohttp import web
+import pytest
+
 from conftest import (
     build_client,
     build_data_endpoint,
@@ -56,11 +58,9 @@ mock_historical_data_newerdata_moredata_endpoint = build_data_endpoint(
         (EOWUnits.UNIT_LITER_LC, NativeUnits.CM, 0.001),
     ],
 )
+@pytest.mark.asyncio()
 async def test_meter_info(
-    aiohttp_client: Any,
-    units: EOWUnits,
-    expected_native_unit: NativeUnits,
-    expected_factor: float,
+    aiohttp_client: Any, units: Any, expected_native_unit: Any, expected_factor: Any
 ) -> None:
     """Test meter returns expected units."""
     app = web.Application()
@@ -81,18 +81,21 @@ async def test_meter_info(
     meter = await build_meter(client)
 
     # Read meter info
-    assert meter.reading.reading == 42.0 * expected_factor
-    assert meter.reading.unit == expected_native_unit
-    assert meter.meter_info is not None
-    assert meter.native_unit_of_measurement == expected_native_unit
+    assert meter.reading.reading == 42.0 * expected_factor  # nosec: B101
+    assert meter.reading.unit == expected_native_unit  # nosec: B101
+    assert meter.meter_info is not None  # nosec: B101
+    assert meter.native_unit_of_measurement == expected_native_unit  # nosec: B101
 
     # Read meter with some historical
     await meter.read_historical_data(client=client, days_to_load=1)
-    assert len(meter.last_historical_data) == 1
-    assert meter.last_historical_data[0].reading == 42.0 * expected_factor
-    assert meter.last_historical_data[0].unit == expected_native_unit
+    assert len(meter.last_historical_data) == 1  # nosec: B101
+    assert (
+        meter.last_historical_data[0].reading == 42.0 * expected_factor
+    )  # nosec: B101
+    assert meter.last_historical_data[0].unit == expected_native_unit  # nosec: B101
 
 
+@pytest.mark.asyncio()
 async def test_meter_historical_data_no_data(aiohttp_client: Any) -> None:
     """Basic meter test."""
     app = web.Application()
@@ -112,8 +115,8 @@ async def test_meter_historical_data_no_data(aiohttp_client: Any) -> None:
 
     # Read historical data with no data
     data = await meter.read_historical_data(client=client, days_to_load=1)
-    assert data != []
-    assert meter.last_historical_data != []
+    assert data != []  # nosec: B101
+    assert meter.last_historical_data != []  # nosec: B101
 
     # New meter reading in CM
     app = web.Application()
@@ -134,14 +137,15 @@ async def test_meter_historical_data_no_data(aiohttp_client: Any) -> None:
 
     # Read meter with some historical
     data = await meter.read_historical_data(client=client, days_to_load=1)
-    assert data == []
+    assert data == []  # nosec: B101
 
     # Read historical data with no data
     data = await meter.read_historical_data(client=client, days_to_load=1)
-    assert data == []
-    assert meter.last_historical_data != []
+    assert data == []  # nosec: B101
+    assert meter.last_historical_data != []  # nosec: B101
 
 
+@pytest.mark.asyncio()
 async def test_meter_info_mismatch(aiohttp_client: Any) -> None:
     """Test meter handling units mismatch."""
     app = web.Application()
@@ -175,75 +179,67 @@ async def test_meter_info_mismatch(aiohttp_client: Any) -> None:
     await meter.read_meter_info(client)
 
     with pytest.raises(EyeOnWaterUnitError):
-        assert meter.reading
+        assert meter.reading  # nosec: B101
 
 
-async def test_meter_properties(aiohttp_client: Any) -> None:
-    """Test meter_uuid, meter_id, and native_unit_of_measurement properties."""
+@pytest.mark.asyncio()
+async def test_meter_uuid_and_id_properties(aiohttp_client: Any) -> None:
+    """Verify meter_uuid and meter_id delegate to the underlying MeterReader."""
+    app = web.Application()
+    app.router.add_post("/account/signin", mock_signin_endpoint)
+    app.router.add_post("/api/2/residential/new_search", mock_read_meter_endpoint)
+
+    websession = await aiohttp_client(app)
+    _, client = await build_client(websession)
+    meter = await build_meter(client)
+
+    assert meter.meter_uuid == "meter_uuid"  # nosec: B101
+    assert meter.meter_id == "meter_id"  # nosec: B101
+
+
+@pytest.mark.asyncio()
+async def test_meter_historical_data_takes_newer(aiohttp_client: Any) -> None:
+    """When second read has a later timestamp, last_historical_data is replaced."""
     app = web.Application()
     app.router.add_post("/account/signin", mock_signin_endpoint)
     app.router.add_post("/api/2/residential/new_search", mock_read_meter_endpoint)
     app.router.add_post("/api/2/residential/consumption", mock_historical_data_endpoint)
     websession = await aiohttp_client(app)
-
     _, client = await build_client(websession)
     meter = await build_meter(client)
-
-    assert meter.meter_uuid == "meter_uuid"
-    assert meter.meter_id == "meter_id"
-    assert meter.native_unit_of_measurement == NativeUnits.GAL
-
-
-async def test_meter_info_none_raises(aiohttp_client: Any) -> None:
-    """Test meter_info property raises when _meter_info is None."""
-    app = web.Application()
-    app.router.add_post("/account/signin", mock_signin_endpoint)
-    app.router.add_post("/api/2/residential/new_search", mock_read_meter_endpoint)
-    app.router.add_post("/api/2/residential/consumption", mock_historical_data_endpoint)
-    websession = await aiohttp_client(app)
-
-    _, client = await build_client(websession)
-    meter = await build_meter(client)
-
-    # pylint: disable-next=protected-access
-    meter._meter_info = None  # type: ignore[assignment]
-    with pytest.raises(EyeOnWaterException):
-        _ = meter.meter_info
-
-
-async def test_meter_reading_none_raises(aiohttp_client: Any) -> None:
-    """Test reading property raises when _reading_data is None."""
-    app = web.Application()
-    app.router.add_post("/account/signin", mock_signin_endpoint)
-    app.router.add_post("/api/2/residential/new_search", mock_read_meter_endpoint)
-    app.router.add_post("/api/2/residential/consumption", mock_historical_data_endpoint)
-    websession = await aiohttp_client(app)
-
-    _, client = await build_client(websession)
-    meter = await build_meter(client)
-
-    # pylint: disable-next=protected-access
-    meter._reading_data = None  # type: ignore[assignment]
-    with pytest.raises(EyeOnWaterException):
-        _ = meter.reading
-
-
-async def test_meter_historical_same_date_more_data(aiohttp_client: Any) -> None:
-    """Historical data: same end date but more points replaces existing."""
-    app = web.Application()
-    app.router.add_post("/account/signin", mock_signin_endpoint)
-    app.router.add_post("/api/2/residential/new_search", mock_read_meter_endpoint)
-    app.router.add_post("/api/2/residential/consumption", mock_historical_data_endpoint)
-    websession = await aiohttp_client(app)
-
-    _, client = await build_client(websession)
-    meter = await build_meter(client)
-
-    # First read: populate last_historical_data
     await meter.read_historical_data(client=client, days_to_load=1)
-    assert len(meter.last_historical_data) == 1
+    first_last_dt = meter.last_historical_data[-1].dt
 
-    # Second read with more data at same date
+    app2 = web.Application()
+    app2.router.add_post("/account/signin", mock_signin_endpoint)
+    app2.router.add_post("/api/2/residential/new_search", mock_read_meter_endpoint)
+    app2.router.add_post(
+        "/api/2/residential/consumption", mock_historical_data_newer_data_endpoint
+    )
+    websession2 = await aiohttp_client(app2)
+    _, client2 = await build_client(websession2)
+    await meter.read_historical_data(client=client2, days_to_load=1)
+
+    assert meter.last_historical_data[-1].dt > first_last_dt  # nosec: B101
+
+
+@pytest.mark.asyncio()
+async def test_meter_historical_data_takes_more_when_equal_reading(
+    aiohttp_client: Any,
+) -> None:
+    """When same last reading but more points, last_historical_data is replaced."""
+    app = web.Application()
+    app.router.add_post("/account/signin", mock_signin_endpoint)
+    app.router.add_post("/api/2/residential/new_search", mock_read_meter_endpoint)
+    app.router.add_post(
+        "/api/2/residential/consumption", mock_historical_data_newer_data_endpoint
+    )
+    websession = await aiohttp_client(app)
+    _, client = await build_client(websession)
+    meter = await build_meter(client)
+    await meter.read_historical_data(client=client, days_to_load=1)
+    assert len(meter.last_historical_data) == 1  # nosec: B101
+
     app2 = web.Application()
     app2.router.add_post("/account/signin", mock_signin_endpoint)
     app2.router.add_post("/api/2/residential/new_search", mock_read_meter_endpoint)
@@ -253,8 +249,6 @@ async def test_meter_historical_same_date_more_data(aiohttp_client: Any) -> None
     )
     websession2 = await aiohttp_client(app2)
     _, client2 = await build_client(websession2)
-
-    # Force same date in last_historical_data to trigger same-date-more-data branch
     await meter.read_historical_data(client=client2, days_to_load=1)
     # The moredata mock has 2 entries, should replace
     assert len(meter.last_historical_data) >= 1
@@ -285,3 +279,67 @@ async def test_meter_convert_to_native_preserves_flow_and_end_dt(aiohttp_client,
     assert converted.reading == 100.0
     assert converted.flow_value == 200.0
     assert converted.end_dt == end_dt
+
+@pytest.mark.asyncio()
+async def test_meter_historical_data_unchanged_when_fewer_points(
+    aiohttp_client: Any,
+) -> None:
+    """When same last reading but fewer points, last_historical_data is unchanged."""
+    app = web.Application()
+    app.router.add_post("/account/signin", mock_signin_endpoint)
+    app.router.add_post("/api/2/residential/new_search", mock_read_meter_endpoint)
+    app.router.add_post(
+        "/api/2/residential/consumption",
+        mock_historical_data_newerdata_moredata_endpoint,
+    )
+    websession = await aiohttp_client(app)
+    _, client = await build_client(websession)
+    meter = await build_meter(client)
+    await meter.read_historical_data(client=client, days_to_load=1)
+    assert len(meter.last_historical_data) == 2  # nosec: B101
+
+    app2 = web.Application()
+    app2.router.add_post("/account/signin", mock_signin_endpoint)
+    app2.router.add_post("/api/2/residential/new_search", mock_read_meter_endpoint)
+    app2.router.add_post(
+        "/api/2/residential/consumption", mock_historical_data_newer_data_endpoint
+    )
+    websession2 = await aiohttp_client(app2)
+    _, client2 = await build_client(websession2)
+    await meter.read_historical_data(client=client2, days_to_load=1)
+
+    assert len(meter.last_historical_data) == 2  # nosec: B101 — unchanged
+
+
+@pytest.mark.asyncio()
+async def test_meter_info_property_raises_when_none(aiohttp_client: Any) -> None:
+    """Verify meter_info property raises EyeOnWaterException when data is None."""
+    app = web.Application()
+    app.router.add_post("/account/signin", mock_signin_endpoint)
+    app.router.add_post("/api/2/residential/new_search", mock_read_meter_endpoint)
+
+    websession = await aiohttp_client(app)
+    _, client = await build_client(websession)
+    meter = await build_meter(client)
+    # pylint: disable-next=protected-access
+    meter._meter_info = None  # type: ignore[assignment]
+
+    with pytest.raises(EyeOnWaterException):  # nosec: B101
+        _ = meter.meter_info
+
+
+@pytest.mark.asyncio()
+async def test_meter_reading_property_raises_when_none(aiohttp_client: Any) -> None:
+    """Verify reading property raises EyeOnWaterException when data is None."""
+    app = web.Application()
+    app.router.add_post("/account/signin", mock_signin_endpoint)
+    app.router.add_post("/api/2/residential/new_search", mock_read_meter_endpoint)
+
+    websession = await aiohttp_client(app)
+    _, client = await build_client(websession)
+    meter = await build_meter(client)
+    # pylint: disable-next=protected-access
+    meter._reading_data = None  # type: ignore[assignment]
+
+    with pytest.raises(EyeOnWaterException):  # nosec: B101
+        _ = meter.reading
