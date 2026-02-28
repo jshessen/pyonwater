@@ -4,8 +4,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from aiohttp import web
-import pytest
-
 from conftest import (
     build_client,
     build_data_endpoint,

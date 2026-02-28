@@ -6,8 +6,6 @@ import math
 from typing import Any
 
 from aiohttp import web
-import pytest
-
 from conftest import (
     build_at_a_glance_endpoint,
     build_client,
@@ -15,6 +13,8 @@ from conftest import (
     mock_read_meter_endpoint,
     mock_signin_endpoint,
 )
+import pytest
+
 from pyonwater import (
     AtAGlanceData,
     DailyUsagePoint,
@@ -24,7 +24,6 @@ from pyonwater import (
 )
 from pyonwater.models.eow_models import MeterInfo
 from pyonwater.models.units import EOWUnits
-
 
 # ---------------------------------------------------------------------------
 # AtAGlanceData model tests

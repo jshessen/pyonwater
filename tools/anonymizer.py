@@ -5,9 +5,11 @@ import json
 import os
 import re
 import sys
-from typing import Any
+from typing import Any, TypeAlias, Union
 
 from pyonwater.models import EOWUnits
+
+JsonValue: TypeAlias = Union[dict[str, Any], list[Any], bool, int, float, str, None]
 
 
 def is_date(string: str, mask: str) -> bool:
@@ -28,18 +30,12 @@ def is_unit(string: str) -> bool:
         return False
 
 
-def traverse(data: Any) -> Any:  # noqa: C901
+def traverse(data: JsonValue) -> JsonValue:  # noqa: C901
     """Anonymize an entity."""
     if isinstance(data, dict):
-        d: dict[str, Any] = data  # type: ignore[assignment]
-        for k in d:
-            d[k] = traverse(d[k])
-        return d
+        return {str(k): traverse(v) for k, v in data.items()}
     if isinstance(data, list):
-        lst: list[Any] = data  # type: ignore[assignment]
-        for i, item in enumerate(lst):
-            lst[i] = traverse(item)
-        return lst
+        return [traverse(item) for item in data]
     if isinstance(data, bool):
         return data
     elif isinstance(data, int):

@@ -3,14 +3,13 @@
 from typing import Any
 
 from aiohttp import web
-import pytest
-
 from conftest import (
     add_error_decorator,
     mock_get_meters_endpoint,
     mock_read_meter_endpoint,
     mock_signin_endpoint,
 )
+import pytest
 
 from pyonwater import (
     Account,
