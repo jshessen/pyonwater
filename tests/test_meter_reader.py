@@ -1,8 +1,10 @@
 """Tests for pyonwater meter reader."""  # nosec: B101, B106
 
+import datetime
 import json
 import logging
 from typing import Any
+from unittest.mock import patch
 
 from aiohttp import web
 from conftest import (
@@ -14,8 +16,10 @@ from conftest import (
     mock_signin_endpoint,
 )
 import pytest
+from pydantic import ValidationError
 
-from pyonwater import EyeOnWaterAPIError, MeterReader
+from pyonwater import EyeOnWaterAPIError, EyeOnWaterResponseIsEmpty, MeterReader
+from pyonwater.models import HistoricalData
 
 
 @pytest.mark.asyncio()
@@ -210,3 +214,59 @@ async def test_meter_reader_historical_invalid_json_debug_logging(
             await reader.read_historical_data(client=client, days_to_load=1)
     finally:
         logger.setLevel(original_level)
+
+
+@pytest.mark.asyncio()
+async def test_meter_reader_historical_validation_error_empty_input_raises_empty(
+    aiohttp_client: Any,
+) -> None:
+    """EyeOnWaterResponseIsEmpty raised when ValidationError has json_invalid + falsy input.
+
+    Covers the second empty-body safety net in meter_reader.py (lines 255-260):
+    a raw response that passes the stripped-string check but whose pydantic parse
+    produces a ``json_invalid`` ValidationError with an empty ``input`` field.
+
+    The trigger is constructed by capturing a real ValidationError from an
+    empty-string parse (``HistoricalData.model_validate_json("")`` → type
+    ``json_invalid``, input ``""``) and patching the call site so it fires
+    even when raw_data is non-empty.
+    """
+    # Build a real pydantic ValidationError with type="json_invalid" and
+    # input="" (falsy) by parsing an empty string.
+    falsy_input_error: ValidationError | None = None
+    try:
+        HistoricalData.model_validate_json("")
+    except ValidationError as empty_json_error:
+        falsy_input_error = empty_json_error
+    else:
+        pytest.fail("Expected ValidationError from empty-string parse")  # nosec: B101
+
+    assert falsy_input_error is not None  # guaranteed by else branch above
+
+    async def mock_non_empty_response(_request: web.Request) -> web.Response:
+        # Non-empty, non-null body so the stripped-string check passes;
+        # the ValidationError patch below is the only way to reach lines 255-260.
+        return web.Response(text="{non_empty_but_will_be_intercepted}")
+
+    app = web.Application()
+    app.router.add_post("/account/signin", mock_signin_endpoint)
+    app.router.add_post("/api/2/residential/new_search", mock_read_meter_endpoint)
+    app.router.add_post("/api/2/residential/consumption", mock_non_empty_response)
+
+    websession = await aiohttp_client(app)
+    _, client = await build_client(websession)
+    reader = MeterReader(meter_uuid="meter_uuid", meter_id="meter_id")
+
+    with patch.object(
+        HistoricalData,
+        "model_validate_json",
+        side_effect=falsy_input_error,
+    ):
+        # Call the single-day method directly: the outer read_historical_data
+        # loop catches EyeOnWaterResponseIsEmpty and continues, so we bypass it
+        # to assert the exception propagates from the per-day fetch.
+        with pytest.raises(EyeOnWaterResponseIsEmpty):  # nosec: B101
+            await reader.read_historical_data_one_day(
+                client=client,
+                date=datetime.datetime(2024, 1, 15),
+            )
