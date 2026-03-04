@@ -17,9 +17,7 @@ from pyonwater import (
 def test_deduce_native_unit():
     """Test units deducing native units."""
 
-    assert (
-        deduce_native_units(EOWUnits.UNIT_CUBIC_METER) == NativeUnits.CM
-    )  # nosec: B101
+    assert deduce_native_units(EOWUnits.UNIT_CUBIC_METER) == NativeUnits.CM  # nosec: B101
     assert deduce_native_units(EOWUnits.UNIT_CM) == NativeUnits.CM  # nosec: B101
     assert deduce_native_units(EOWUnits.UNIT_LITER) == NativeUnits.CM  # nosec: B101
     assert deduce_native_units(EOWUnits.UNIT_LITERS) == NativeUnits.CM  # nosec: B101
@@ -31,9 +29,7 @@ def test_deduce_native_unit():
     assert deduce_native_units(EOWUnits.UNIT_10_GAL) == NativeUnits.GAL  # nosec: B101
 
     assert deduce_native_units(EOWUnits.UNIT_CF) == NativeUnits.CF  # nosec: B101
-    assert (
-        deduce_native_units(EOWUnits.UNIT_CUBIC_FEET) == NativeUnits.CF
-    )  # nosec: B101
+    assert deduce_native_units(EOWUnits.UNIT_CUBIC_FEET) == NativeUnits.CF  # nosec: B101
     assert deduce_native_units(EOWUnits.UNIT_CCF) == NativeUnits.CF  # nosec: B101
 
     with pytest.raises(EyeOnWaterUnitError):

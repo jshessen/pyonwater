@@ -57,9 +57,9 @@ class MeterReader:
         _LOGGER.debug("Requesting meter reading")
 
         query = {"query": {"terms": {"meter.meter_uuid": [self.meter_uuid]}}}
-        data = await client.request(path=SEARCH_ENDPOINT, method="post", json=query)
-        data = json.loads(data)
-        meters = data["elastic_results"]["hits"]["hits"]
+        raw = await client.request(path=SEARCH_ENDPOINT, method="post", json=query)
+        parsed: dict[str, Any] = json.loads(raw)
+        meters: list[Any] = parsed["elastic_results"]["hits"]["hits"]
         if len(meters) > 1:
             msg = "More than one meter reading found"
             raise EyeOnWaterAPIError(msg)

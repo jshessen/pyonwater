@@ -130,9 +130,9 @@ def add_error_decorator(
     return mock
 
 
-mock_read_meter_endpoint: Callable[
-    [web.Request], Awaitable[web.Response]
-] = build_data_endpoint("read_meter_mock_anonymized")
+mock_read_meter_endpoint: Callable[[web.Request], Awaitable[web.Response]] = (
+    build_data_endpoint("read_meter_mock_anonymized")
+)
 
 
 async def mock_new_search_empty_endpoint(_request: web.Request) -> web.Response:

@@ -87,9 +87,7 @@ async def test_meter_info(
     # Read meter with some historical
     await meter.read_historical_data(client=client, days_to_load=1)
     assert len(meter.last_historical_data) == 1  # nosec: B101
-    assert (
-        meter.last_historical_data[0].reading == 42.0 * expected_factor
-    )  # nosec: B101
+    assert meter.last_historical_data[0].reading == 42.0 * expected_factor  # nosec: B101
     assert meter.last_historical_data[0].unit == expected_native_unit  # nosec: B101
 
 

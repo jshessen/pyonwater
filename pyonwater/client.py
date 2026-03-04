@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime
 import json
 import logging
+from http.cookies import SimpleCookie
 from typing import TYPE_CHECKING, Any
 
 from aiohttp import ClientTimeout
@@ -52,7 +53,7 @@ class Client:
         self.username = account.username
         self.password = account.password
         self.websession = websession
-        self.cookies = None
+        self.cookies: SimpleCookie | None = None
         self.authenticated = False
         self.token_expiration = datetime.datetime.now()
         self.user_agent = None
@@ -66,7 +67,7 @@ class Client:
     def _update_token_expiration(self) -> None:
         self.token_expiration = datetime.datetime.now() + TOKEN_EXPIRATION
 
-    @retry(  # type: ignore[misc]
+    @retry(
         retry=retry_if_exception_type(
             (EyeOnWaterAuthExpired, EyeOnWaterRateLimitError),
         ),

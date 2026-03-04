@@ -56,9 +56,7 @@ async def test_consumption_request_payload(aiohttp_client: Any) -> None:
         assert params["aggregate"] == "hourly"  # nosec: B101
         assert params["perspective"] == "billing"  # nosec: B101
         assert params["date"] == "01/02/2024"  # nosec: B101
-        assert (
-            "units" in params
-        )  # nosec: B101  # Critical: API returns empty without this
+        assert "units" in params  # nosec: B101  # Critical: API returns empty without this
         assert params["source"] == "barnacle"  # nosec: B101
         assert params["combine"] == "true"  # nosec: B101
 
@@ -89,11 +87,13 @@ async def test_consumption_validates_required_params(aiohttp_client: Any) -> Non
     app = web.Application()
     app.router.add_post("/account/signin", mock_signin_endpoint)
     app.router.add_post(
-        "/api/2/residential/new_search", mock_read_meter_endpoint  # type: ignore
+        "/api/2/residential/new_search",
+        mock_read_meter_endpoint,  # type: ignore
     )
     # Use the improved validating mock that checks for required params
     app.router.add_post(
-        "/api/2/residential/consumption", mock_historical_data_endpoint  # type: ignore
+        "/api/2/residential/consumption",
+        mock_historical_data_endpoint,  # type: ignore
     )
 
     websession = await aiohttp_client(app)

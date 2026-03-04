@@ -195,9 +195,7 @@ async def test_meter_last_read_time(aiohttp_client: Any) -> None:
 
     # Mock data has last_read_time = "1990-01-27T00:00:00"
     assert meter.last_read_time is not None  # nosec: B101
-    assert meter.last_read_time == datetime.datetime(
-        1990, 1, 27, 0, 0, 0
-    )  # nosec: B101
+    assert meter.last_read_time == datetime.datetime(1990, 1, 27, 0, 0, 0)  # nosec: B101
 
 
 @pytest.mark.asyncio()
