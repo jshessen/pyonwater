@@ -20,11 +20,12 @@ pydantic = ">=2.12"
 
 [tool.poetry.group.dev.dependencies]
 types-pytz = "^2023.3.0.1"
-pytest = "^7.4.1"
-pytest-asyncio = "^0.21.1"
+types-python-dateutil = "*"
+pytest = ">=8.2"
+pytest-asyncio = ">=1.0"
 pytest-aiohttp = "^1.0.4"
 pytest-cov = "^4.1.0"
-coverall = "^1.0.5"
+pre-commit = ">=3.7"
 
 [tool.black]
 target-version = ["py39", "py310"]
@@ -39,6 +40,9 @@ known_first_party = [
 combine_as_imports = true
 
 [tool.ruff]
+line-length = 88
+
+[tool.ruff.lint]
 select = [
     #"ALL",
     "D1",  # pydocstyle errors
@@ -53,12 +57,12 @@ select = [
     "RUF",  # the ruff developer's own rules
 ]
 ignore = [
-    "E501",  # line too long, handled by black
+    "E501",  # line too long, handled by ruff-format
     "B008",  # do not perform function calls in argument defaults
     "B905",  # ignore zip() without an explicit strict= parameter, only support with python >3.10
 ]
 
-[tool.ruff.per-file-ignores]
+[tool.ruff.lint.per-file-ignores]
 "tests/*.py" = ["D1"]
 
 [tool.mypy]
