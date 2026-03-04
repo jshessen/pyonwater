@@ -7,11 +7,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6.0.2
 
-      - uses: actions/setup-python@v3
+      - uses: actions/setup-python@v6.2.0
         with:
-          python-version: 3.9
+          python-version: '3.13'
 
       - run: |
           pip install poetry
@@ -36,4 +36,4 @@ jobs:
       - name: Publish package distributions to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          packages_dir: artifact/
+          packages-dir: artifact/

@@ -15,7 +15,7 @@ jobs:
     outputs:
       new_version: ${{ steps.check_tag.outputs.new_version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6.0.2
         with:
           fetch-depth: 0
 
@@ -53,9 +53,9 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6.0.2
 
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v6.2.0
         with:
           python-version: '3.13'
 
