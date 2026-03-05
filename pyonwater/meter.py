@@ -85,7 +85,7 @@ class Meter:
             end_date=end_date,
         )
 
-        historical_data = [self._convert_to_native(dp) for dp in historical_data]
+        historical_data = [self.convert_to_native(dp) for dp in historical_data]
 
         if not self.last_historical_data:
             self.last_historical_data = historical_data
@@ -117,10 +117,14 @@ class Meter:
             dt=reading.read_time, reading=reading.full_read, unit=reading.units
         )
 
-        return self._convert_to_native(dp)
+        return self.convert_to_native(dp)
 
-    def _convert_to_native(self, dp: DataPoint) -> DataPoint:
-        """Convert data point to meters native units"""
+    def convert_to_native(self, dp: DataPoint) -> DataPoint:
+        """Convert a DataPoint to this meter's native unit.
+
+        Applies unit conversion using the meter's deduced native unit of
+        measurement. Preserves ``flow_value`` and ``end_dt`` from the input.
+        """
         native_reading = convert_to_native(
             self._native_unit_of_measurement, EOWUnits(dp.unit), dp.reading
         )
