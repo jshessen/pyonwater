@@ -1,6 +1,9 @@
 """Tests for pyonwater client."""  # nosec: B101, B106
 
+import datetime
+import json
 from typing import Any
+from unittest.mock import MagicMock
 
 from aiohttp import web
 from conftest import (
@@ -345,28 +348,111 @@ async def test_client_falls_back_to_dashboard_when_new_search_empty(
     assert readers[0].meter_id == "456"  # nosec: B101
 
 
+# KNOWN BUG: _fetch_meter_readers_dashboard raises an unhandled KeyError when a meter
+# entry has meter_uuid but no meter_id (METER_ID_FIELD key). Fixing the bug is out of
+# scope; test coverage deferred until the bug is fixed.
+
+
 @pytest.mark.asyncio()
 async def test_client_token_expires_after_timeout(aiohttp_client: Any) -> None:
     """Token should be re-fetched after expiration period."""
-    import datetime
-
     app = web.Application()
     app.router.add_post("/account/signin", mock_signin_endpoint)
     websession = await aiohttp_client(app)
 
-    account = Account(eow_hostname="", username="user", password="")  # nosec: B106
+    account = Account(  # nosec: B106
+        eow_hostname="",
+        username="user",
+        password="",
+    )
     client = Client(websession=websession, account=account)
 
     await client.authenticate()
     assert client.is_token_valid  # nosec: B101
 
-    # Simulate token expiration
     client.token_expiration = datetime.datetime.now() - datetime.timedelta(minutes=1)
     assert not client.is_token_valid  # nosec: B101
 
-    # Re-authenticate should succeed
     await client.authenticate()
     assert client.is_token_valid  # nosec: B101
+
+
+@pytest.mark.asyncio()
+async def test_new_search_non_json_response_returns_empty(aiohttp_client: Any) -> None:
+    """Non-JSON response from new_search is caught as JSONDecodeError → returns []."""
+
+    async def bad_json(_request: web.Request) -> web.Response:
+        return web.Response(text="not json at all")
+
+    app = web.Application()
+    app.router.add_post("/account/signin", mock_signin_endpoint)
+    app.router.add_post("/api/2/residential/new_search", bad_json)
+    websession = await aiohttp_client(app)
+    account = Account(  # nosec: B106
+        eow_hostname="",
+        username="user",
+        password="pass",
+    )
+    client = Client(websession=websession, account=account)
+    await client.authenticate()
+
+    readers = await account.fetch_meter_readers_new_search(client)
+    assert readers == []  # nosec: B101
+
+
+@pytest.mark.asyncio()
+async def test_new_search_missing_elastic_results_returns_empty(
+    aiohttp_client: Any,
+) -> None:
+    """Response with no 'elastic_results' key → empty meters list."""
+
+    async def no_elastic(_request: web.Request) -> web.Response:
+        return web.Response(text='{"other_key": 1}')
+
+    app = web.Application()
+    app.router.add_post("/account/signin", mock_signin_endpoint)
+    app.router.add_post("/api/2/residential/new_search", no_elastic)
+    websession = await aiohttp_client(app)
+    account = Account(  # nosec: B106
+        eow_hostname="",
+        username="user",
+        password="pass",
+    )
+    client = Client(websession=websession, account=account)
+    await client.authenticate()
+
+    readers = await account.fetch_meter_readers_new_search(client)
+    assert readers == []  # nosec: B101
+
+
+@pytest.mark.asyncio()
+async def test_new_search_meter_uuid_from_source_direct(aiohttp_client: Any) -> None:
+    """meter_uuid found directly in _source (not nested under 'meter') is used."""
+
+    async def direct_source(_request: web.Request) -> web.Response:
+        data = (
+            '{"elastic_results": {"hits": {"hits": ['
+            '{"_source": {"meter_uuid": "src_uuid", "meter_id": "src_id"}}'
+            ']}}}'
+        )
+        return web.Response(text=data)
+
+    app = web.Application()
+    app.router.add_post("/account/signin", mock_signin_endpoint)
+    app.router.add_post("/api/2/residential/new_search", direct_source)
+    websession = await aiohttp_client(app)
+    account = Account(  # nosec: B106
+        eow_hostname="",
+        username="user",
+        password="pass",
+    )
+    client = Client(websession=websession, account=account)
+    await client.authenticate()
+
+    readers = await account.fetch_meter_readers_new_search(client)
+    assert len(readers) == 1  # nosec: B101
+    assert readers[0].meter_uuid == "src_uuid"  # nosec: B101
+    assert readers[0].meter_id == "src_id"  # nosec: B101
 
 
 @pytest.mark.asyncio()
@@ -377,7 +463,7 @@ async def test_client_new_search_ignores_id_as_uuid(aiohttp_client: Any) -> None
         data = (
             '{"elastic_results": {"hits": {"hits": ['
             '{"_id": "es_doc_id", "_source": {"meter_id": "456"}}'
-            "]}}}"
+            ']}}}'
         )
         return web.Response(text=data)
 
@@ -386,9 +472,142 @@ async def test_client_new_search_ignores_id_as_uuid(aiohttp_client: Any) -> None
     app.router.add_post("/api/2/residential/new_search", mock_new_search_id_only)
     websession = await aiohttp_client(app)
 
-    account = Account(eow_hostname="", username="user", password="")  # nosec: B106
+    account = Account(  # nosec: B106
+        eow_hostname="",
+        username="user",
+        password="",
+    )
     client = Client(websession=websession, account=account)
     await client.authenticate()
 
     readers = await account.fetch_meter_readers_new_search(client=client)
-    assert len(readers) == 0  # nosec: B101
+    assert readers == []  # nosec: B101
+
+
+@pytest.mark.asyncio()
+async def test_new_search_skips_hit_with_no_uuid_or_id(aiohttp_client: Any) -> None:
+    """Hit with no discoverable meter_uuid or meter_id is skipped → returns []."""
+
+    async def no_ids(_request: web.Request) -> web.Response:
+        data = (
+            '{"elastic_results": {"hits": {"hits": ['
+            '{"_source": {}}'
+            ']}}}'
+        )
+        return web.Response(text=data)
+
+    app = web.Application()
+    app.router.add_post("/account/signin", mock_signin_endpoint)
+    app.router.add_post("/api/2/residential/new_search", no_ids)
+    websession = await aiohttp_client(app)
+    account = Account(  # nosec: B106
+        eow_hostname="",
+        username="user",
+        password="pass",
+    )
+    client = Client(websession=websession, account=account)
+    await client.authenticate()
+
+    readers = await account.fetch_meter_readers_new_search(client)
+    assert readers == []  # nosec: B101
+
+
+# ---------------------------------------------------------------------------
+# Phase 5 — sync unit tests (no aiohttp server)
+# ---------------------------------------------------------------------------
+
+
+def test_is_token_valid_not_authenticated() -> None:
+    """Not authenticated and token expired → is_token_valid is False."""
+    account = Account(  # nosec: B106
+        eow_hostname="",
+        username="u",
+        password="p",
+    )
+    client = Client(websession=MagicMock(), account=account)
+    client.authenticated = False
+    client.token_expiration = datetime.datetime.now() - datetime.timedelta(seconds=1)
+    assert client.is_token_valid is False  # nosec: B101
+
+
+def test_is_token_valid_authenticated_not_expired() -> None:
+    """Authenticated with future token expiration → is_token_valid is True."""
+    account = Account(  # nosec: B106
+        eow_hostname="",
+        username="u",
+        password="p",
+    )
+    client = Client(websession=MagicMock(), account=account)
+    client.authenticated = True
+    client.token_expiration = datetime.datetime.now() + datetime.timedelta(hours=1)
+    assert client.is_token_valid is True  # nosec: B101
+
+
+def test_is_token_valid_authenticated_expired() -> None:
+    """Authenticated but expired token should be treated as invalid."""
+    account = Account(  # nosec: B106
+        eow_hostname="",
+        username="u",
+        password="p",
+    )
+    client = Client(websession=MagicMock(), account=account)
+    client.authenticated = True
+    client.token_expiration = datetime.datetime.now() - datetime.timedelta(seconds=1)
+    assert client.is_token_valid is False  # nosec: B101
+
+
+def test_extract_json_matching_prefix() -> None:
+    """extract_json strips prefix and trailing semicolon, then parses JSON."""
+    account = Account(  # nosec: B106
+        eow_hostname="",
+        username="u",
+        password="p",
+    )
+    client = Client(websession=MagicMock(), account=account)
+    line = 'prefix[{"key": "val"}];'
+    result = client.extract_json(line, "prefix")
+    assert result == [{"key": "val"}]  # nosec: B101
+
+
+def test_extract_json_no_match() -> None:
+    """extract_json with no matching prefix produces an invalid slice → JSONDecodeError.
+
+    NOTE: In production, callers guard with `if prefix in line` before calling.
+    This test documents the unguarded behavior.
+    """
+    account = Account(  # nosec: B106
+        eow_hostname="",
+        username="u",
+        password="p",
+    )
+    client = Client(websession=MagicMock(), account=account)
+    with pytest.raises(json.JSONDecodeError):
+        client.extract_json("no prefix here; text", "MISSING_PREFIX = ")
+
+
+def test_truncate_payload_short_unchanged() -> None:
+    """Payloads at or under 1000 chars are returned unmodified."""
+    account = Account(  # nosec: B106
+        eow_hostname="",
+        username="u",
+        password="p",
+    )
+    client = Client(websession=MagicMock(), account=account)
+    payload_999 = "X" * 999
+    payload_1000 = "X" * 1000
+    assert client._truncate_payload(payload_999) == payload_999  # nosec: B101
+    assert client._truncate_payload(payload_1000) == payload_1000  # nosec: B101
+
+
+def test_truncate_payload_long_truncated() -> None:
+    """Payloads over 1000 chars are truncated to 1000 chars plus '...'."""
+    account = Account(  # nosec: B106
+        eow_hostname="",
+        username="u",
+        password="p",
+    )
+    client = Client(websession=MagicMock(), account=account)
+    payload = "X" * 1001
+    result = client._truncate_payload(payload)
+    assert result == "X" * 1000 + "..."  # nosec: B101
+    assert len(result) == 1003  # nosec: B101

@@ -326,9 +326,7 @@ async def test_export_range_invalid_poll_interval() -> None:
 
     reader = MeterReader(meter_uuid="meter_uuid", meter_id="meter_id")
     client_mock = AsyncMock()
-    with pytest.raises(
-        ValueError, match="poll_interval must be non-negative, got -1"
-    ):
+    with pytest.raises(ValueError, match="poll_interval must be non-negative, got -1"):
         await reader.read_historical_data_range_export(
             client_mock, days_to_load=1, max_retries=1, poll_interval=-1
         )
@@ -382,9 +380,7 @@ async def test_export_range_missing_url(aiohttp_client: Any) -> None:
         return web.Response(text='{"task_id": "task-abc"}')
 
     async def mock_status(_request: web.Request) -> web.Response:
-        return web.Response(
-            text='{"state": "done", "result": {"no_url_here": 1}}'
-        )
+        return web.Response(text='{"state": "done", "result": {"no_url_here": 1}}')
 
     app.router.add_get("/reports/export_initiate", mock_initiate)
     app.router.add_get("/reports/export_check_status/task-abc", mock_status)
@@ -472,7 +468,9 @@ def test_parse_export_csv_space_column_names() -> None:
     "Read_Time" and "Read_Unit". Both must be recognised.
     """
     reader = MeterReader(meter_uuid="x", meter_id="x")
-    raw_csv = "Read Time,Read,Unit,Flow,Timezone\n03/01/2026 12:15,100.0,GAL,,US/Pacific\n"
+    raw_csv = (
+        "Read Time,Read,Unit,Flow,Timezone\n03/01/2026 12:15,100.0,GAL,,US/Pacific\n"
+    )
 
     points = reader.parse_export_csv(raw_csv)
 
@@ -494,7 +492,9 @@ def test_parse_export_csv_empty_string() -> None:
 def test_parse_export_csv_no_flow_column() -> None:
     """parse_export_csv sets flow_value to None when the Flow column is absent."""
     reader = MeterReader(meter_uuid="x", meter_id="x")
-    raw_csv = "Read_Time,Read,Read_Unit,Timezone\n03/01/2026 12:15,100.0,GAL,US/Pacific\n"
+    raw_csv = (
+        "Read_Time,Read,Read_Unit,Timezone\n03/01/2026 12:15,100.0,GAL,US/Pacific\n"
+    )
 
     points = reader.parse_export_csv(raw_csv)
 
