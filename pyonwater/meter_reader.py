@@ -81,6 +81,7 @@ class MeterReader:
         days_to_load: int,
         aggregation: AggregationLevel = AggregationLevel.HOURLY,
         units: RequestUnits | None = None,
+        end_date: datetime.datetime | None = None,
     ) -> list[DataPoint]:
         """Retrieve historical data for today and past N days.
 
@@ -90,6 +91,7 @@ class MeterReader:
             aggregation: Granularity level for data (default: HOURLY).
                          Use QUARTER_HOURLY for 15-minute resolution.
             units: Preferred units for response data (optional).
+            end_date: Optional end date (defaults to today if not provided).
 
         Raises:
             ValueError: If days_to_load is not positive.
@@ -98,7 +100,10 @@ class MeterReader:
             msg = f"days_to_load must be at least 1, got {days_to_load}"
             raise ValueError(msg)
 
-        today = datetime.datetime.now(tz=pytz.UTC).replace(
+        if end_date is None:
+            end_date = datetime.datetime.now(tz=pytz.UTC)
+
+        end_date = end_date.replace(
             hour=0,
             minute=0,
             second=0,
@@ -106,7 +111,7 @@ class MeterReader:
         )
 
         date_list: list[datetime.datetime] = [
-            today - datetime.timedelta(days=x) for x in range(0, days_to_load)
+            end_date - datetime.timedelta(days=x) for x in range(0, days_to_load)
         ]
         date_list.reverse()
 
