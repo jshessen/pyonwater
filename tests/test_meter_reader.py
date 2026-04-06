@@ -6,6 +6,8 @@ import logging
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
+import pytz
+
 from aiohttp import web
 from conftest import (
     build_client,
@@ -658,3 +660,34 @@ async def test_read_historical_data_one_day_units_forwarded(
     )
 
     assert captured_body["params"]["units"] == RequestUnits.GALLONS.value  # nosec: B101
+
+
+@pytest.mark.asyncio()
+async def test_meter_reader_end_date_parameter(aiohttp_client: Any) -> None:
+    """Verify end_date parameter controls which date range is fetched."""
+    captured_dates: list[str] = []
+
+    async def capture_endpoint(request: web.Request) -> web.Response:
+        payload = await request.json()
+        params = payload.get("params", {})
+        if "date" in params:
+            captured_dates.append(params["date"])
+        with open(
+            "tests/mock_data/historical_data_mock_anonymized.json",
+            encoding="utf-8",
+        ) as f:
+            return web.Response(text=f.read())
+
+    app = web.Application()
+    app.router.add_post("/account/signin", mock_signin_endpoint)
+    app.router.add_post("/api/2/residential/new_search", mock_read_meter_endpoint)
+    app.router.add_post("/api/2/residential/consumption", capture_endpoint)
+
+    websession = await aiohttp_client(app)
+    _, client = await build_client(websession)
+    reader = MeterReader(meter_uuid="meter_uuid", meter_id="meter_id")
+
+    end_date = datetime.datetime(2024, 6, 15, 12, 0, 0, tzinfo=pytz.UTC)
+    await reader.read_historical_data(client=client, days_to_load=2, end_date=end_date)
+
+    assert captured_dates == ["06/14/2024", "06/15/2024"]  # nosec: B101
