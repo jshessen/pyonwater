@@ -172,3 +172,81 @@ class HistoricalData(BaseModel):
     timezone: Optional[str] = None
     min_aggregation_seconds: Optional[int] = None
     annotations: Optional[list[str]] = None
+
+
+class DailyUsagePoint(BaseModel):
+    """A single day's usage value in an at_a_glance response."""
+
+    value: Optional[float] = None
+    meter_count: Optional[int] = None
+    date: Optional[str] = None
+
+
+class AtAGlanceData(BaseModel):
+    """Model for at_a_glance endpoint response.
+
+    The endpoint is called with ``{"meter_uuid": "<uuid>"}`` and returns
+    per-day usage arrays for this week and last week, plus a rolling average.
+
+    Response shape (actual API)::
+
+        {
+          "this_week": {
+            "<meter_uuid_or_null>": [
+              {"value": 95.8, "meter_count": 1, "date": "2026-02-16"},
+              ...
+            ]
+          },
+          "last_week": {"<meter_uuid_or_null>": [...]},
+          "average": 126.26,
+          "days_in_average": 30.0,
+          "in_units": "GAL",
+          "display_units": "GAL"
+        }
+    """
+
+    # Per-day arrays keyed by meter UUID (or "null" for single-meter requests).
+    this_week: Optional[dict[str, list[DailyUsagePoint]]] = None
+    last_week: Optional[dict[str, list[DailyUsagePoint]]] = None
+    average: Optional[float] = None
+    days_in_average: Optional[float] = None
+    in_units: Optional[EOWUnits] = None
+    display_units: Optional[EOWUnits] = None
+
+    @property
+    def this_week_points(self) -> list[DailyUsagePoint]:
+        """Return this week's daily usage points as a flat list."""
+        if not self.this_week:
+            return []
+        points: list[DailyUsagePoint] = []
+        for daily_list in self.this_week.values():
+            points.extend(daily_list)
+        points.sort(key=lambda p: p.date or "")
+        return points
+
+    @property
+    def last_week_points(self) -> list[DailyUsagePoint]:
+        """Return last week's daily usage points as a flat list."""
+        if not self.last_week:
+            return []
+        points: list[DailyUsagePoint] = []
+        for daily_list in self.last_week.values():
+            points.extend(daily_list)
+        points.sort(key=lambda p: p.date or "")
+        return points
+
+    @property
+    def this_week_total(self) -> Optional[float]:
+        """Return total usage for this week."""
+        pts = self.this_week_points
+        if not pts:
+            return None
+        return sum(p.value for p in pts if p.value is not None)
+
+    @property
+    def last_week_total(self) -> Optional[float]:
+        """Return total usage for last week."""
+        pts = self.last_week_points
+        if not pts:
+            return None
+        return sum(p.value for p in pts if p.value is not None)

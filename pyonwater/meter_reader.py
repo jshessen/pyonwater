@@ -16,6 +16,7 @@ import pytz
 
 from .exceptions import EyeOnWaterAPIError, EyeOnWaterResponseIsEmpty
 from .models import DataPoint, HistoricalData, MeterInfo
+from .models.eow_historical_models import AtAGlanceData
 from .models.units import AggregationLevel, RequestUnits
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -23,6 +24,7 @@ if TYPE_CHECKING:  # pragma: no cover
 
 SEARCH_ENDPOINT = "/api/2/residential/new_search"
 CONSUMPTION_ENDPOINT = "/api/2/residential/consumption?eow=True"
+AT_A_GLANCE_ENDPOINT = "/api/2/residential/at_a_glance"
 EXPORT_INIT_ENDPOINT = "/reports/export_initiate"
 EXPORT_STATUS_ENDPOINT = "/reports/export_check_status/"
 
@@ -488,3 +490,37 @@ class MeterReader:
         except ValueError as exc:
             msg = f"Unrecognized export datetime: {value}"
             raise ValueError(msg) from exc
+
+    async def read_at_a_glance(
+        self,
+        client: Client,
+    ) -> AtAGlanceData:
+        """Retrieve quick summary statistics from the at_a_glance endpoint.
+
+        Returns per-day usage for this week and last week, plus a rolling
+        daily average.
+
+        Args:
+            client: The authenticated API client.
+
+        Returns:
+            AtAGlanceData with this_week/last_week daily arrays and average.
+
+        Note:
+            The at_a_glance endpoint accepts only ``{"meter_uuid": "..."}``
+            and determines units and aggregation server-side.  Use
+            ``read_historical_data`` for unit/aggregation control.
+        """
+        body: dict[str, str] = {"meter_uuid": self.meter_uuid}
+        raw_data = await client.request(
+            path=AT_A_GLANCE_ENDPOINT,
+            method="post",
+            json=body,
+        )
+        try:
+            data = AtAGlanceData.model_validate_json(raw_data)
+        except ValidationError as e:
+            msg = f"Unexpected at_a_glance response {e}"
+            raise EyeOnWaterAPIError(msg) from e
+
+        return data
