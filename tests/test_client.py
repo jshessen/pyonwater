@@ -2,8 +2,9 @@
 
 import datetime
 import json
+import logging
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 from aiohttp import web
 from conftest import (
@@ -17,6 +18,7 @@ import pytest
 from pyonwater import (
     Account,
     Client,
+    EyeOnWaterAPIError,
     EyeOnWaterAuthError,
     EyeOnWaterException,
     EyeOnWaterRateLimitError,
@@ -489,11 +491,7 @@ async def test_new_search_skips_hit_with_no_uuid_or_id(aiohttp_client: Any) -> N
     """Hit with no discoverable meter_uuid or meter_id is skipped → returns []."""
 
     async def no_ids(_request: web.Request) -> web.Response:
-        data = (
-            '{"elastic_results": {"hits": {"hits": ['
-            '{"_source": {}}'
-            ']}}}'
-        )
+        data = json.dumps({"elastic_results": {"hits": {"hits": [{"_source": {}}]}}})
         return web.Response(text=data)
 
     app = web.Application()
@@ -530,15 +528,15 @@ def test_is_token_valid_not_authenticated() -> None:
     assert client.is_token_valid is False  # nosec: B101
 
 
-def test_is_token_valid_authenticated_not_expired() -> None:
-    """Authenticated with future token expiration → is_token_valid is True."""
+def test_is_token_valid_not_authenticated_not_expired() -> None:
+    """Future token expiration keeps the token valid even when not authenticated."""
     account = Account(  # nosec: B106
         eow_hostname="",
         username="u",
         password="p",
     )
     client = Client(websession=MagicMock(), account=account)
-    client.authenticated = True
+    client.authenticated = False
     client.token_expiration = datetime.datetime.now() + datetime.timedelta(hours=1)
     assert client.is_token_valid is True  # nosec: B101
 
@@ -585,29 +583,62 @@ def test_extract_json_no_match() -> None:
         client.extract_json("no prefix here; text", "MISSING_PREFIX = ")
 
 
-def test_truncate_payload_short_unchanged() -> None:
-    """Payloads at or under 1000 chars are returned unmodified."""
-    account = Account(  # nosec: B106
-        eow_hostname="",
-        username="u",
-        password="p",
-    )
-    client = Client(websession=MagicMock(), account=account)
+@pytest.mark.asyncio()
+async def test_request_logs_short_error_payload_unchanged(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Short error payloads are logged unchanged through the public request API."""
     payload_999 = "X" * 999
     payload_1000 = "X" * 1000
-    assert client._truncate_payload(payload_999) == payload_999  # nosec: B101
-    assert client._truncate_payload(payload_1000) == payload_1000  # nosec: B101
+    response = MagicMock(status=503)
+    response.text = AsyncMock(side_effect=[payload_999, payload_1000])
+    websession = MagicMock()
+    websession.request = AsyncMock(return_value=response)
 
-
-def test_truncate_payload_long_truncated() -> None:
-    """Payloads over 1000 chars are truncated to 1000 chars plus '...'."""
     account = Account(  # nosec: B106
         eow_hostname="",
         username="u",
         password="p",
     )
-    client = Client(websession=MagicMock(), account=account)
+    client = Client(websession=websession, account=account)
+    client.authenticated = True
+    client.token_expiration = datetime.datetime.now() + datetime.timedelta(hours=1)
+
+    with caplog.at_level(logging.ERROR, logger="pyonwater.client"):
+        with pytest.raises(EyeOnWaterAPIError, match="Request failed: 503"):
+            await client.request("/dashboard/user", "get")
+        with pytest.raises(EyeOnWaterAPIError, match="Request failed: 503"):
+            await client.request("/dashboard/user", "get")
+
+    assert payload_999 in caplog.text  # nosec: B101
+    assert payload_1000 in caplog.text  # nosec: B101
+    assert f"{payload_1000}..." not in caplog.text  # nosec: B101
+
+
+@pytest.mark.asyncio()
+async def test_request_logs_long_error_payload_truncated(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Long error payloads are truncated in logs through the public request API."""
     payload = "X" * 1001
-    result = client._truncate_payload(payload)
-    assert result == "X" * 1000 + "..."  # nosec: B101
-    assert len(result) == 1003  # nosec: B101
+    response = MagicMock(status=503)
+    response.text = AsyncMock(return_value=payload)
+    websession = MagicMock()
+    websession.request = AsyncMock(return_value=response)
+
+    account = Account(  # nosec: B106
+        eow_hostname="",
+        username="u",
+        password="p",
+    )
+    client = Client(websession=websession, account=account)
+    client.authenticated = True
+    client.token_expiration = datetime.datetime.now() + datetime.timedelta(hours=1)
+
+    with caplog.at_level(logging.ERROR, logger="pyonwater.client"):
+        with pytest.raises(EyeOnWaterAPIError, match="Request failed: 503"):
+            await client.request("/dashboard/user", "get")
+
+    expected = "X" * 1000 + "..."
+    assert expected in caplog.text  # nosec: B101
+    assert payload not in caplog.text  # nosec: B101

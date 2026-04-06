@@ -8,7 +8,12 @@ import pytest
 from pydantic import ValidationError
 
 from pyonwater.models import MeterInfo
-from pyonwater.models.eow_historical_models import HistoricalData, Hit, Params, TimeSerie
+from pyonwater.models.eow_historical_models import (
+    HistoricalData,
+    Hit,
+    Params,
+    TimeSerie,
+)
 from pyonwater.models.eow_models import Battery, Flags, LatestRead, Pwr
 from pyonwater.models.units import EOWUnits
 
@@ -168,7 +173,9 @@ def test_meter_info_minimal_payload_parses() -> None:
 
 def test_historical_data_full_parse() -> None:
     """HistoricalData parses the anonymized fixture without errors."""
-    raw = Path("tests/mock_data/historical_data_mock_anonymized.json").read_text()
+    raw = Path("tests/mock_data/historical_data_mock_anonymized.json").read_text(
+        encoding="utf-8"
+    )
     data = HistoricalData.model_validate(json.loads(raw))
     assert len(data.timeseries) > 0
     assert data.hit.meter_timezone

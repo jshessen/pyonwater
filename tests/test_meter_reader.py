@@ -4,7 +4,7 @@ import datetime
 import json
 import logging
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from aiohttp import web
 from conftest import (
@@ -298,8 +298,6 @@ def test_parse_export_csv_skips_invalid_rows_with_warning(
 @pytest.mark.asyncio()
 async def test_export_range_invalid_days_to_load() -> None:
     """ValueError raised when days_to_load=0."""
-    from unittest.mock import AsyncMock
-
     reader = MeterReader(meter_uuid="meter_uuid", meter_id="meter_id")
     client_mock = AsyncMock()
     with pytest.raises(ValueError, match="days_to_load must be at least 1, got 0"):
@@ -309,8 +307,6 @@ async def test_export_range_invalid_days_to_load() -> None:
 @pytest.mark.asyncio()
 async def test_export_range_invalid_max_retries() -> None:
     """ValueError raised when max_retries=0."""
-    from unittest.mock import AsyncMock
-
     reader = MeterReader(meter_uuid="meter_uuid", meter_id="meter_id")
     client_mock = AsyncMock()
     with pytest.raises(ValueError, match="max_retries must be at least 1, got 0"):
@@ -322,8 +318,6 @@ async def test_export_range_invalid_max_retries() -> None:
 @pytest.mark.asyncio()
 async def test_export_range_invalid_poll_interval() -> None:
     """ValueError raised when poll_interval is negative."""
-    from unittest.mock import AsyncMock
-
     reader = MeterReader(meter_uuid="meter_uuid", meter_id="meter_id")
     client_mock = AsyncMock()
     with pytest.raises(ValueError, match="poll_interval must be non-negative, got -1"):
@@ -486,7 +480,7 @@ def test_parse_export_csv_empty_string() -> None:
 
     points = reader.parse_export_csv("")
 
-    assert points == []  # nosec: B101
+    assert not points  # nosec: B101
 
 
 def test_parse_export_csv_no_flow_column() -> None:
