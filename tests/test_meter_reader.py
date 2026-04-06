@@ -252,13 +252,13 @@ async def test_meter_reader_range_export(aiohttp_client: Any) -> None:
 def test_normalize_export_path() -> None:
     """Verify export URLs are converted into client request paths."""
     assert (  # nosec: B101
-        MeterReader._normalize_export_path(
+        MeterReader.normalize_export_path(
             "https://eyeonwater.com/export/download.csv?token=abc"
         )
         == "/export/download.csv?token=abc"
     )
     assert (
-        MeterReader._normalize_export_path("/export/download.csv")
+        MeterReader.normalize_export_path("/export/download.csv")
         == "/export/download.csv"
     )  # nosec: B101
 
@@ -266,7 +266,7 @@ def test_normalize_export_path() -> None:
 def test_parse_export_datetime_invalid() -> None:
     """Verify invalid export timestamps raise a clear error."""
     with pytest.raises(ValueError, match="Unrecognized export datetime"):
-        MeterReader._parse_export_datetime("not-a-date")
+        MeterReader.parse_export_datetime("not-a-date")
 
 
 def test_parse_export_csv_skips_invalid_rows_with_warning(
@@ -281,7 +281,7 @@ def test_parse_export_csv_skips_invalid_rows_with_warning(
     )
 
     with caplog.at_level(logging.WARNING, logger="pyonwater.meter_reader"):
-        points = reader._parse_export_csv(raw_csv)
+        points = reader.parse_export_csv(raw_csv)
 
     assert len(points) == 1  # nosec: B101
     assert points[0].reading == 100.0  # nosec: B101
