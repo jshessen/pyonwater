@@ -435,7 +435,7 @@ async def test_new_search_meter_uuid_from_source_direct(aiohttp_client: Any) -> 
         data = (
             '{"elastic_results": {"hits": {"hits": ['
             '{"_source": {"meter_uuid": "src_uuid", "meter_id": "src_id"}}'
-            ']}}}'
+            "]}}}"
         )
         return web.Response(text=data)
 
@@ -465,7 +465,7 @@ async def test_client_new_search_ignores_id_as_uuid(aiohttp_client: Any) -> None
         data = (
             '{"elastic_results": {"hits": {"hits": ['
             '{"_id": "es_doc_id", "_source": {"meter_id": "456"}}'
-            ']}}}'
+            "]}}}"
         )
         return web.Response(text=data)
 
@@ -529,7 +529,7 @@ def test_is_token_valid_not_authenticated() -> None:
 
 
 def test_is_token_valid_not_authenticated_not_expired() -> None:
-    """Future token expiration keeps the token valid even when not authenticated."""
+    """Unauthenticated clients are invalid even if the expiration time is in the future."""
     account = Account(  # nosec: B106
         eow_hostname="",
         username="u",
@@ -538,7 +538,7 @@ def test_is_token_valid_not_authenticated_not_expired() -> None:
     client = Client(websession=MagicMock(), account=account)
     client.authenticated = False
     client.token_expiration = datetime.datetime.now() + datetime.timedelta(hours=1)
-    assert client.is_token_valid is True  # nosec: B101
+    assert client.is_token_valid is False  # nosec: B101
 
 
 def test_is_token_valid_authenticated_expired() -> None:
