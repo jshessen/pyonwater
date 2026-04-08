@@ -440,9 +440,7 @@ async def test_meter_read_include_today_false(aiohttp_client: Any) -> None:
         return web.Response(text='{"task_id":"task-x"}')
 
     async def mock_status(_request: web.Request) -> web.Response:
-        return web.Response(
-            text='{"state":"done","result":{"url":"/export/dl.csv"}}'
-        )
+        return web.Response(text='{"state":"done","result":{"url":"/export/dl.csv"}}')
 
     async def mock_csv(_request: web.Request) -> web.Response:
         return web.Response(text="Read_Time,Read,Read_Unit,Flow,Timezone\n")

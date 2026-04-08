@@ -15,8 +15,7 @@ from .exceptions import (
 )
 from .meter import Meter
 from .meter_reader import MeterReader
-from .models import DataPoint, EOWUnits, NativeUnits
-from .models import AtAGlanceData, DailyUsagePoint
+from .models import AtAGlanceData, DailyUsagePoint, DataPoint, EOWUnits, NativeUnits
 from .models.units import AggregationLevel, RequestUnits
 from .units import convert_to_native, deduce_native_units
 

@@ -4,8 +4,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-import pytest
 from pydantic import ValidationError
+import pytest
 
 from pyonwater.models import MeterInfo
 from pyonwater.models.eow_historical_models import (

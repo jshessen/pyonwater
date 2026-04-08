@@ -6,8 +6,6 @@ import logging
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
-import pytz
-
 from aiohttp import web
 from conftest import (
     build_client,
@@ -18,6 +16,7 @@ from conftest import (
     mock_signin_endpoint,
 )
 import pytest
+import pytz
 
 from pyonwater import EyeOnWaterAPIError, EyeOnWaterResponseIsEmpty, MeterReader
 from pyonwater.models.units import AggregationLevel, RequestUnits
